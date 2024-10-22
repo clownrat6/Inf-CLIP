@@ -46,10 +46,14 @@ Breaking the Memory Barrier: Near Infinite Batch Size Scaling for Contrastive Lo
 
 
 ## ⭐ Features
-* [x] [Gradient Accumulation (inf_clip_train/train.py#L180)](https://github.com/DAMO-NLP-SG/Inf-CLIP/inf_clip_train/train.py#L180)
-* [x] [Gradient Cache (inf_clip_train/train.py#L292)](https://github.com/DAMO-NLP-SG/Inf-CLIP/blob/main/inf_clip_train/train.py#L292)
-* [x] [Ring-CL (inf_clip/models/ops/ring.py#L238)](https://github.com/DAMO-NLP-SG/Inf-CLIP/blob/main/inf_clip/models/ops/ring.py#L238)
-* [x] [Inf-CL (inf_clip/models/ops/ring.py#L251)](https://github.com/DAMO-NLP-SG/Inf-CLIP/blob/main/inf_clip/models/ops/ring.py#L251)
+
+`inf_cl` is the triton implementation of Inf-CL loss:
+* [x] [Ring-CL (inf_cl/ring.py#L238)](https://github.com/DAMO-NLP-SG/Inf-CLIP/blob/main/inf_clip/models/ops/ring.py#L238)
+* [x] [Inf-CL  (inf_cl/ring.py#L251)](https://github.com/DAMO-NLP-SG/Inf-CLIP/blob/main/inf_clip/models/ops/ring.py#L251)
+
+`inf_clip`/`inf_clip_train` are the CLIP training codebase with Inf-CL loss, which has these features:
+- [x] [Gradient Accumulation (inf_clip_train/train.py#L180)](https://github.com/DAMO-NLP-SG/Inf-CLIP/inf_clip_train/train.py#L180)
+- [x] [Gradient Cache (inf_clip_train/train.py#L292)](https://github.com/DAMO-NLP-SG/Inf-CLIP/blob/main/inf_clip_train/train.py#L292)
 
 
 ## 🛠️ Requirements and Installation
@@ -65,6 +69,52 @@ git clone https://github.com/DAMO-NLP-SG/Inf-CLIP
 cd Inf-CLIP
 pip install -r requirements.txt
 ```
+
+## 🔑 Usage
+
+A simple example about how to adopt our Inf-CL loss for contrastive learning.
+
+```python
+import torch
+import torch.distributed as dist
+
+
+def create_cl_tensors(rank, world_size):
+    # Parameters
+    dtype = torch.float32
+    num_heads = 3        # Number of attention heads
+    seq_length_q = 32768 # Sequence length
+    seq_length_k = 32768
+    d_model = 256        # Dimension of each head (must be 16, 32, 64, or 128)
+
+    # Randomly initialize inputs
+    q = torch.rand((seq_length_q // world_size, num_heads * d_model), dtype=dtype, device=f"cuda:{rank}")
+    k = torch.rand((seq_length_k // world_size, num_heads * d_model), dtype=dtype, device=f"cuda:{rank}")
+    l = torch.ones([], dtype=dtype, device=f"cuda:{rank}") * np.log(1 / 0.07)
+
+    q = F.normalize(q, p=2, dim=-1).requires_grad_() # Query
+    k = F.normalize(k, p=2, dim=-1).requires_grad_() # Key
+    l = l.requires_grad_() # Logit scale
+
+    return q, k, l
+
+
+if __name__ == "__main__":
+    # Assume that the distributed environment has been initialized
+    dist.init_process_group("nccl")
+
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    # Exampled by Image-Text Contrastive Learning, q is the global image features, 
+    # k is the text features, and l is the logit scale.
+    q, k, l = create_cl_tensors(rank, world_size)
+
+    # labels are diagonal elements by default. 
+    # labels = torch.arange(q.shape[0])
+    loss = cal_inf_loss(q, k, scale=l.exp())
+```
+
 
 ## 🚀 Main Results
 
