@@ -140,18 +140,18 @@ if __name__ == "__main__":
 ## 🚀 Main Results
 
 ### Memory Cost
-<p><img src="assets/memory_cost.jpg" width="800" "/></p>
+<p><img src="https://github.com/user-attachments/assets/05dd3fea-0a93-4716-b321-0a94965e1fbe" width="800" "/></p>
 
 \* denotes adopting "data offload" strategy. 
 
 ### Max Supported Batch Size
-<p><img src="assets/max_batch_size.jpg" width="800" "/></p>
+<p><img src="https://github.com/user-attachments/assets/eb38fb90-3b7e-4696-b078-b7766893f758" width="800" "/></p>
 
 ### Speed
-<p><img src="assets/speed.jpg" width="800" "/></p>
+<p><img src="https://github.com/user-attachments/assets/da72e99b-508b-450a-b12e-401d4991291a" width="800" "/></p>
 
 ### Batch Size Scaling
-<p><img src="assets/batch_size_scaling.jpg" width="800" "/></p>
+<p><img src="https://github.com/user-attachments/assets/5b55fa98-6558-4509-9b66-e290ecf77b41" width="800" "/></p>
 
 Training with larger data scale needs larger batch size.
 
