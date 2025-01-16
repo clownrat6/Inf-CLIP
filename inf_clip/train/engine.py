@@ -3,7 +3,10 @@ import logging
 import math
 import os
 import time
+import queue
+import threading
 from contextlib import nullcontext
+from collections.abc import MutableMapping, Sequence
 
 import numpy as np
 import pynvml
@@ -11,6 +14,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as torch_checkpoint
 import torch.distributed as dist
+from torch.utils.data import DataLoader
 from torch.nn.parallel.distributed import DistributedDataParallel
 from tqdm import tqdm
 
@@ -156,6 +160,80 @@ def backward(total_loss, scaler):
         scaler.scale(total_loss).backward()
     else:
         total_loss.backward()
+
+
+def to_cuda(packed_data):
+    if isinstance(packed_data, bytes):
+        return packed_data
+
+    if isinstance(packed_data, torch.Tensor):
+        packed_data = packed_data.to(device="cuda", non_blocking=True)
+    elif isinstance(packed_data, (int, float, str, bool, complex)):
+        packed_data = packed_data
+    elif isinstance(packed_data, MutableMapping):
+        for key, value in packed_data.items():
+            packed_data[key] = to_cuda(value)
+    elif isinstance(packed_data, Sequence):
+        for i, value in enumerate(packed_data):
+            packed_data[i] = to_cuda(value)
+    return packed_data
+
+
+class CUDADataLoader:
+
+    def __init__(self, dataloader):
+        self.stream = torch.cuda.Stream() # create a new cuda stream in each process
+        # setting a queue for storing prefetched data
+        self.queue = queue.Queue(16)
+        # 
+        self.iter = dataloader.__iter__()
+        # starting a new thread to prefetch data
+        def data_to_cuda_then_queue():
+            while True:
+                try:
+                    self.preload()
+                except StopIteration:
+                    break
+            # NOTE: end flag for the queue
+            self.queue.put(None)
+        self.cuda_thread = threading.Thread(target=data_to_cuda_then_queue, args=())
+        self.cuda_thread.daemon = True
+
+        # NOTE: preload several batch of data
+        (self.preload() for _ in range(8))
+        self.cuda_thread.start()
+
+    def preload(self):
+        batch = next(self.iter)
+        if batch is None:
+            return None
+        torch.cuda.current_stream().wait_stream(self.stream)  # wait tensor to put on GPU
+        with torch.cuda.stream(self.stream):
+            batch = to_cuda(batch)
+            # batch = batch.to(device="cuda", non_blocking=True)
+        self.queue.put(batch)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        next_item = self.queue.get()
+        # NOTE: __iter__ will be stopped when __next__ raises StopIteration 
+        if next_item is None:
+            raise StopIteration
+        return next_item
+
+    def __del__(self):
+        # NOTE: clean up the thread
+        try:
+            self.cuda_thread.join(timeout=10)
+        finally:
+            if self.cuda_thread.is_alive():
+                self.cuda_thread.terminate()
+        # NOTE: clean up the stream
+        self.stream.synchronize()
+        # NOTE: clean up the queue
+        self.queue.queue.clear()
 
 
 class AverageMeter(object):
@@ -445,12 +523,14 @@ def train_one_epoch(start_timestamp, model, data, loss, epoch, optimizer, scaler
 
     rest_iters = num_batches_per_epoch * (args.epochs - epoch)
 
+    cuda_dataloader = CUDADataLoader(dataloader)
+
     losses_m = {}
     global_batch_time_m = AverageMeter()
     batch_time_m = AverageMeter()
     data_time_m  = AverageMeter()
     end = time.time()
-    for i, batch in enumerate(dataloader):
+    for i, batch in enumerate(cuda_dataloader):
         i_accum = i // args.accum_freq
         step = num_batches_per_epoch * epoch + i_accum
 
