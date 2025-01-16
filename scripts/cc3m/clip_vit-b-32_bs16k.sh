@@ -43,7 +43,7 @@ torchrun --nnodes $WORLD_SIZE \
     --node_rank $RANK \
     -m inf_clip.train.main \
     --model ViT-B-32 \
-    --train-data ${DATA_DIR}'/cc3m/{0000..0301}.tar' \
+    --train-data ${DATA_DIR}'/cc3m/cc3m-train-{0000..0575}.tar' \
     --train-num-samples $TRAIN_NUM_SAMPLES \
     --aug-cfg scale='(0.08, 1.0)'\
     --dataset-type webdataset \
@@ -61,7 +61,7 @@ torchrun --nnodes $WORLD_SIZE \
     --precision amp \
     --infloss \
     --log-every-n-steps 5 \
-    --logs $OUTP_DIR/$WANDB_PROJECT \
+    --log_dir $OUTP_DIR/$WANDB_PROJECT \
     --name $RUN_NAME \
     --save-frequency 1 \
     --zeroshot-frequency 1 \

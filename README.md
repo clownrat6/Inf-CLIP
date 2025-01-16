@@ -191,8 +191,8 @@ bash scripts/laion400m/lit_vit-b-32_bs256k.sh
 ```bash
 Inf-CLIP
 ├── datasets
-│   ├── imagenet-1k/ # download val_images.tar.gz of imagenet
-|   |   └── val/
+│   ├── imagenet-1k/ # download val_images.tar.gz of imagenet from https://huggingface.co/datasets/ILSVRC/imagenet-1k/tree/main/data
+|   |   └── val/ # python datasets/reformat_imagenet.py
 |   |   |   ├── n01440764
 |   |   |   ├── n01443537
 |   |   |   ├── ...
